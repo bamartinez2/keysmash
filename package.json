@@ -1,0 +1,36 @@
+{
+  "name": "keysmash",
+  "version": "1.0.0",
+  "description": "Baby keyboard game — every key mash = sound + visuals + light show",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --win"
+  },
+  "dependencies": {
+    "electron": "^33.0.0",
+    "tone": "^15.0.4",
+    "openrgb-sdk": "^0.6.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.keysmash.app",
+    "productName": "KeySmash",
+    "win": {
+      "target": "nsis"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "keymap.js",
+      "babyproof.js",
+      "config.json",
+      "hardware/**/*",
+      "renderer/**/*",
+      "music/**/*"
+    ]
+  }
+}

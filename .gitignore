@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+*.log
+music/*.mp3
+music/*.wav
+music/*.ogg
+music/*.flac
+music/*.m4a

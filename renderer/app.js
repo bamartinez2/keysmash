@@ -1,0 +1,114 @@
+// Keydown orchestrator: wires sound + visuals + hardware IPC
+
+// Key-to-color and screen position maps (duplicated from keymap.js for renderer)
+const PENTATONIC_KEYS = ['C', 'D', 'E', 'G', 'A'];
+const KEY_ROWS = [
+  ['Backquote','Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal','Backspace'],
+  ['Tab','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI','KeyO','KeyP','BracketLeft','BracketRight','Backslash'],
+  ['CapsLock','KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL','Semicolon','Quote','Enter'],
+  ['ShiftLeft','KeyZ','KeyX','KeyC','KeyV','KeyB','KeyN','KeyM','Comma','Period','Slash','ShiftRight'],
+  ['ControlLeft','MetaLeft','AltLeft','Space','AltRight','MetaRight','ControlRight'],
+];
+
+const NOTE_COLORS = {
+  C: { r: 255, g: 50,  b: 50  },
+  D: { r: 255, g: 165, b: 0   },
+  E: { r: 255, g: 255, b: 50  },
+  G: { r: 50,  g: 220, b: 50  },
+  A: { r: 80,  g: 120, b: 255 },
+};
+
+const APP_KEY_TO_COLOR = {};
+const APP_KEY_TO_SCREEN_POS = {};
+
+for (let row = 0; row < KEY_ROWS.length; row++) {
+  for (let col = 0; col < KEY_ROWS[row].length; col++) {
+    const code = KEY_ROWS[row][col];
+    const noteIdx = col % PENTATONIC_KEYS.length;
+    APP_KEY_TO_COLOR[code] = NOTE_COLORS[PENTATONIC_KEYS[noteIdx]];
+    APP_KEY_TO_SCREEN_POS[code] = {
+      x: (col + 0.5) / KEY_ROWS[row].length,
+      y: (row + 0.5) / KEY_ROWS.length,
+    };
+  }
+}
+
+const EXTRAS = ['F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','Escape','Delete','Insert','Home','End','PageUp','PageDown'];
+for (let i = 0; i < EXTRAS.length; i++) {
+  APP_KEY_TO_COLOR[EXTRAS[i]] = NOTE_COLORS[PENTATONIC_KEYS[i % 5]];
+  APP_KEY_TO_SCREEN_POS[EXTRAS[i]] = { x: Math.random(), y: Math.random() };
+}
+
+// Map key codes to display characters
+function keyCodeToChar(code) {
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code === 'Space') return ' ';
+  if (code === 'Enter') return '\u23CE';
+  if (code === 'Backspace') return '\u232B';
+  if (code === 'Tab') return '\u21B9';
+  if (code.startsWith('F') && !isNaN(code.slice(1))) return code;
+  return '';
+}
+
+(async function main() {
+  const canvas = document.getElementById('canvas');
+  const sound = new SoundEngine();
+  const visuals = new VisualEngine(canvas);
+  const music = new MusicPlayer();
+
+  // Load config and init music
+  const config = await window.keysmash.getConfig();
+  if (config.keyToneVolume !== undefined) sound.setVolume(config.keyToneVolume);
+  await music.init(config);
+
+  // Listen for music commands from main process
+  window.keysmash.onMusicCommand((cmd) => music.handleCommand(cmd));
+
+  // Start visual loop
+  visuals.start();
+
+  // Track pressed keys to avoid repeat-fire
+  const pressedKeys = new Set();
+
+  document.addEventListener('keydown', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const code = e.code;
+    if (pressedKeys.has(code)) return; // ignore key repeat
+    pressedKeys.add(code);
+
+    // Ensure audio context is started (needs user gesture)
+    await sound.ensureStarted();
+
+    // Start music on first keypress (needs user gesture for autoplay)
+    if (music.enabled && music.audio.paused && music.playlist.length > 0) {
+      music.play();
+    }
+
+    // 1. Sound — instant, local
+    sound.play(code);
+
+    // 2. Visuals — instant, local
+    const color = APP_KEY_TO_COLOR[code] || { r: 255, g: 255, b: 255 };
+    const pos = APP_KEY_TO_SCREEN_POS[code] || { x: 0.5, y: 0.5 };
+    const char = keyCodeToChar(code);
+    visuals.burst(pos.x, pos.y, color, char);
+
+    // 3. Hardware — fire-and-forget IPC
+    window.keysmash.triggerHardware(code);
+  });
+
+  document.addEventListener('keyup', (e) => {
+    e.preventDefault();
+    pressedKeys.delete(e.code);
+  });
+
+  // Block context menu
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Block all mouse events (babies click randomly)
+  document.addEventListener('mousedown', (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
+})();
