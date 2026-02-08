@@ -6,21 +6,43 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder --win"
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable",
+    "build:installer": "electron-builder --win nsis"
   },
   "dependencies": {
-    "electron": "^33.0.0",
     "tone": "^15.0.4",
     "openrgb-sdk": "^0.6.0"
   },
   "devDependencies": {
+    "electron": "^33.0.0",
     "electron-builder": "^25.1.8"
   },
   "build": {
     "appId": "com.keysmash.app",
     "productName": "KeySmash",
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "installerSidebar": null,
+      "shortcutName": "KeySmash"
+    },
+    "portable": {
+      "artifactName": "KeySmash-Portable-${version}.exe"
     },
     "files": [
       "main.js",
@@ -30,7 +52,19 @@
       "config.json",
       "hardware/**/*",
       "renderer/**/*",
-      "music/**/*"
-    ]
+      "node_modules/**/*",
+      "!node_modules/electron/**",
+      "!node_modules/electron-builder/**"
+    ],
+    "extraResources": [
+      {
+        "from": "music/",
+        "to": "music/",
+        "filter": ["**/*"]
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    }
   }
 }

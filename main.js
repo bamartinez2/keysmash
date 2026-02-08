@@ -111,7 +111,12 @@ function setupIPC() {
   // Scan music folder and return file list
   ipcMain.handle('get-music-files', () => {
     try {
-      const musicDir = path.resolve(__dirname, config.musicFolder);
+      // In packaged app, music is in extraResources; in dev, relative to app root
+      let musicDir = path.resolve(__dirname, config.musicFolder);
+      if (app.isPackaged) {
+        const resourceMusic = path.join(process.resourcesPath, 'music');
+        if (fs.existsSync(resourceMusic)) musicDir = resourceMusic;
+      }
       if (!fs.existsSync(musicDir)) return [];
       const exts = ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac'];
       return fs.readdirSync(musicDir)
