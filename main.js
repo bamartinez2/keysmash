@@ -32,7 +32,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      devTools: isDev,
+      devTools: true,
     },
   });
 
@@ -42,6 +42,17 @@ function createWindow() {
   }
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // Log renderer errors to main process console
+  win.webContents.on('console-message', (_e, level, msg, line, sourceId) => {
+    console.log(`[Renderer ${level}] ${msg} (${sourceId}:${line})`);
+  });
+  win.webContents.on('did-fail-load', (_e, code, desc) => {
+    console.error(`[LoadFail] ${code}: ${desc}`);
+  });
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error('[RenderGone]', details);
+  });
 
   // Prevent navigation away
   win.webContents.on('will-navigate', (e) => e.preventDefault());

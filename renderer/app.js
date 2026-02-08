@@ -1,6 +1,7 @@
 // Keydown orchestrator: wires sound + visuals + hardware IPC
+// Designed to be crash-proof — each subsystem is independent
 
-// Key-to-color and screen position maps (duplicated from keymap.js for renderer)
+// Key-to-color and screen position maps
 const PENTATONIC_KEYS = ['C', 'D', 'E', 'G', 'A'];
 const KEY_ROWS = [
   ['Backquote','Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal','Backspace'],
@@ -39,7 +40,6 @@ for (let i = 0; i < EXTRAS.length; i++) {
   APP_KEY_TO_SCREEN_POS[EXTRAS[i]] = { x: Math.random(), y: Math.random() };
 }
 
-// Map key codes to display characters
 function keyCodeToChar(code) {
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
@@ -51,64 +51,121 @@ function keyCodeToChar(code) {
   return '';
 }
 
-(async function main() {
+// --- Error display (visible on black screen for debugging) ---
+const errors = [];
+function showError(msg) {
+  errors.push(msg);
+  console.error('[KeySmash]', msg);
+  // Draw errors on screen if canvas exists
+  const c = document.getElementById('canvas');
+  if (c) {
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ff0000';
+    ctx.font = '16px monospace';
+    errors.forEach((e, i) => ctx.fillText(e, 20, 30 + i * 22));
+  }
+}
+
+// --- Global error handlers ---
+window.onerror = function(msg, src, line, col, err) {
+  showError(`${msg} (${src}:${line}:${col})`);
+};
+window.addEventListener('unhandledrejection', function(e) {
+  showError('Unhandled rejection: ' + (e.reason?.message || e.reason || 'unknown'));
+});
+
+// --- Init subsystems independently ---
+let sound = null;
+let visuals = null;
+let music = null;
+
+// 1. Visuals — start IMMEDIATELY, no dependencies
+try {
   const canvas = document.getElementById('canvas');
-  const sound = new SoundEngine();
-  const visuals = new VisualEngine(canvas);
-  const music = new MusicPlayer();
-
-  // Load config and init music
-  const config = await window.keysmash.getConfig();
-  if (config.keyToneVolume !== undefined) sound.setVolume(config.keyToneVolume);
-  await music.init(config);
-
-  // Listen for music commands from main process
-  window.keysmash.onMusicCommand((cmd) => music.handleCommand(cmd));
-
-  // Start visual loop
+  if (!canvas) throw new Error('Canvas element not found');
+  visuals = new VisualEngine(canvas);
   visuals.start();
+} catch (e) {
+  showError('Visuals init failed: ' + e.message);
+}
 
-  // Track pressed keys to avoid repeat-fire
-  const pressedKeys = new Set();
+// 2. Sound — create instance (Tone.js starts on first keypress)
+try {
+  sound = new SoundEngine();
+} catch (e) {
+  showError('Sound init failed: ' + e.message);
+}
 
-  document.addEventListener('keydown', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+// 3. Music — async init, but don't block anything
+try {
+  music = new MusicPlayer();
+} catch (e) {
+  showError('Music init failed: ' + e.message);
+  music = null;
+}
 
-    const code = e.code;
-    if (pressedKeys.has(code)) return; // ignore key repeat
-    pressedKeys.add(code);
+// 4. Load config and finish music setup (async, non-blocking)
+(async function initAsync() {
+  try {
+    if (window.keysmash) {
+      const config = await window.keysmash.getConfig();
+      if (config.keyToneVolume !== undefined && sound) sound.setVolume(config.keyToneVolume);
+      if (music) await music.init(config);
+      window.keysmash.onMusicCommand((cmd) => { if (music) music.handleCommand(cmd); });
+    } else {
+      showError('window.keysmash not available (preload may have failed)');
+    }
+  } catch (e) {
+    showError('Async init failed: ' + e.message);
+  }
+})();
 
-    // Ensure audio context is started (needs user gesture)
-    await sound.ensureStarted();
+// --- Keydown handler ---
+const pressedKeys = new Set();
 
-    // Start music on first keypress (needs user gesture for autoplay)
-    if (music.enabled && music.audio.paused && music.playlist.length > 0) {
+document.addEventListener('keydown', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const code = e.code;
+  if (pressedKeys.has(code)) return;
+  pressedKeys.add(code);
+
+  // Visuals — always try
+  try {
+    if (visuals) {
+      const color = APP_KEY_TO_COLOR[code] || { r: 255, g: 255, b: 255 };
+      const pos = APP_KEY_TO_SCREEN_POS[code] || { x: 0.5, y: 0.5 };
+      const char = keyCodeToChar(code);
+      visuals.burst(pos.x, pos.y, color, char);
+    }
+  } catch (e) { /* don't let visuals crash kill sound */ }
+
+  // Sound — ensure started then play
+  try {
+    if (sound) {
+      sound.ensureStarted().then(() => sound.play(code)).catch(() => {});
+    }
+  } catch (e) { /* don't let sound crash kill visuals */ }
+
+  // Music — start on first keypress
+  try {
+    if (music && music.enabled && music.audio && music.audio.paused && music.playlist.length > 0) {
       music.play();
     }
+  } catch (e) { /* ignore */ }
 
-    // 1. Sound — instant, local
-    sound.play(code);
+  // Hardware — fire-and-forget IPC
+  try {
+    if (window.keysmash) window.keysmash.triggerHardware(code);
+  } catch (e) { /* ignore */ }
+});
 
-    // 2. Visuals — instant, local
-    const color = APP_KEY_TO_COLOR[code] || { r: 255, g: 255, b: 255 };
-    const pos = APP_KEY_TO_SCREEN_POS[code] || { x: 0.5, y: 0.5 };
-    const char = keyCodeToChar(code);
-    visuals.burst(pos.x, pos.y, color, char);
+document.addEventListener('keyup', function(e) {
+  e.preventDefault();
+  pressedKeys.delete(e.code);
+});
 
-    // 3. Hardware — fire-and-forget IPC
-    window.keysmash.triggerHardware(code);
-  });
-
-  document.addEventListener('keyup', (e) => {
-    e.preventDefault();
-    pressedKeys.delete(e.code);
-  });
-
-  // Block context menu
-  document.addEventListener('contextmenu', (e) => e.preventDefault());
-
-  // Block all mouse events (babies click randomly)
-  document.addEventListener('mousedown', (e) => e.preventDefault());
-  document.addEventListener('dblclick', (e) => e.preventDefault());
-})();
+document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+document.addEventListener('mousedown', function(e) { e.preventDefault(); });
+document.addEventListener('dblclick', function(e) { e.preventDefault(); });
