@@ -1,6 +1,6 @@
 {
   "name": "keysmash",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Baby keyboard game — every key mash = sound + visuals + light show",
   "main": "main.js",
   "scripts": {
