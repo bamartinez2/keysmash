@@ -1,3 +1,4 @@
+(function() {
 // Background music player
 // Plays shuffled local music files, volume ducked under key tones
 
@@ -76,3 +77,4 @@ class MusicPlayer {
 }
 
 window.MusicPlayer = MusicPlayer;
+})();

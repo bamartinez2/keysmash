@@ -1,6 +1,4 @@
-// Canvas 2D particle engine
-// Burst circles, expanding rings, letter pops, cycling background
-
+(function() {
 const MAX_PARTICLES = 500;
 
 class VisualEngine {
@@ -162,3 +160,4 @@ class VisualEngine {
 }
 
 window.VisualEngine = VisualEngine;
+})();

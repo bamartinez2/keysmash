@@ -1,7 +1,7 @@
+(function() {
 // Keydown orchestrator: wires sound + visuals + hardware IPC
 // Designed to be crash-proof — each subsystem is independent
 
-// Key-to-color and screen position maps
 const PENTATONIC_KEYS = ['C', 'D', 'E', 'G', 'A'];
 const KEY_ROWS = [
   ['Backquote','Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal','Backspace'],
@@ -56,7 +56,6 @@ const errors = [];
 function showError(msg) {
   errors.push(msg);
   console.error('[KeySmash]', msg);
-  // Draw errors on screen if canvas exists
   const c = document.getElementById('canvas');
   if (c) {
     const ctx = c.getContext('2d');
@@ -66,12 +65,11 @@ function showError(msg) {
   }
 }
 
-// --- Global error handlers ---
 window.onerror = function(msg, src, line, col, err) {
-  showError(`${msg} (${src}:${line}:${col})`);
+  showError(msg + ' (' + src + ':' + line + ':' + col + ')');
 };
 window.addEventListener('unhandledrejection', function(e) {
-  showError('Unhandled rejection: ' + (e.reason?.message || e.reason || 'unknown'));
+  showError('Unhandled rejection: ' + (e.reason && e.reason.message || e.reason || 'unknown'));
 });
 
 // --- Init subsystems independently ---
@@ -111,7 +109,7 @@ try {
       const config = await window.keysmash.getConfig();
       if (config.keyToneVolume !== undefined && sound) sound.setVolume(config.keyToneVolume);
       if (music) await music.init(config);
-      window.keysmash.onMusicCommand((cmd) => { if (music) music.handleCommand(cmd); });
+      window.keysmash.onMusicCommand(function(cmd) { if (music) music.handleCommand(cmd); });
     } else {
       showError('window.keysmash not available (preload may have failed)');
     }
@@ -144,7 +142,7 @@ document.addEventListener('keydown', function(e) {
   // Sound — ensure started then play
   try {
     if (sound) {
-      sound.ensureStarted().then(() => sound.play(code)).catch(() => {});
+      sound.ensureStarted().then(function() { sound.play(code); }).catch(function() {});
     }
   } catch (e) { /* don't let sound crash kill visuals */ }
 
@@ -169,3 +167,4 @@ document.addEventListener('keyup', function(e) {
 document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
 document.addEventListener('mousedown', function(e) { e.preventDefault(); });
 document.addEventListener('dblclick', function(e) { e.preventDefault(); });
+})();
