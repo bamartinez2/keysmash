@@ -28,3 +28,15 @@
 - [x] Block all dangerous key combos
 - [x] Parent escape (Ctrl+Shift+Q 3s)
 - [x] electron-builder config
+
+## Phase 6: Packaging + CI
+- [x] GitHub Actions build on tag push (windows-latest)
+- [x] NSIS installer + portable exe
+- [x] GitHub Releases with artifacts
+
+## Phase 7: Mobile Web Version
+- [x] Self-contained PWA (web/index.html)
+- [x] Touch + multi-touch support
+- [x] Web Audio API pentatonic synth (no dependencies)
+- [x] Add to Home Screen (fullscreen, iOS)
+- [x] Systemd service on homelab (keysmash-web, port 8888)

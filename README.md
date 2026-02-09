@@ -1,22 +1,40 @@
 # KeySmash
 
-A baby keyboard game for Windows 11. Every key mash produces a pleasant musical note, colorful particle effects on screen, Razer keyboard lighting ripples, and NZXT case color washes. Fully baby-proofed — no accidental Alt+F4, Alt+Tab, or desktop escapes.
+A baby keyboard/touch toy. Every key mash or screen tap produces a pleasant musical note, colorful particle effects, and optional physical light shows (Razer keyboard + NZXT case). Fully baby-proofed.
 
-## Quick Start (Portable EXE)
+**Two versions:**
+- **Desktop (Windows)** — Electron kiosk app with hardware lighting
+- **Mobile (iPhone/iPad/any browser)** — PWA web app, tap-to-play
 
-1. Download `KeySmash-Portable-1.0.0.exe` from [Releases](../../releases)
+---
+
+## Mobile / iPhone
+
+KeySmash runs as a web app on any device with a browser. Tap anywhere for sounds + visuals.
+
+**Self-hosted setup** (already running on the homelab):
+- Visit `http://10.10.20.252:8888` from your phone
+- **Add to Home Screen** (Safari share button) for fullscreen, app-like experience
+- Multi-touch supported — baby can mash the whole screen
+- Also works with a keyboard if one is connected
+
+The web server runs as a systemd service (`keysmash-web`) and auto-starts on boot.
+
+---
+
+## Desktop — Quick Start (Portable EXE)
+
+1. Download `KeySmash-Portable.exe` from the [latest release](../../releases/latest)
 2. Double-click to run — no installation needed
 3. Drop music files (`.mp3`, `.wav`, `.ogg`) into the `music/` folder next to the exe for background music (optional)
 4. The app launches fullscreen. Mash keys!
 
 **Parent exit:** Hold `Ctrl + Shift + Q` for 3 seconds to quit.
 
----
+## Desktop — Installation (Windows Installer)
 
-## Installation (Windows Installer)
-
-1. Download `KeySmash-Setup-1.0.0.exe` from [Releases](../../releases)
-2. Run the installer — it installs to your user profile (no admin needed)
+1. Download `KeySmash-Setup.exe` from the [latest release](../../releases/latest)
+2. Run the installer — installs to your user profile (no admin needed)
 3. Launch "KeySmash" from the Start Menu
 
 ---
@@ -25,50 +43,38 @@ A baby keyboard game for Windows 11. Every key mash produces a pleasant musical 
 
 ### Prerequisites
 
-- **Windows 10/11** (building must happen on Windows for native modules)
 - **Node.js 18+** — [download](https://nodejs.org/)
 - **Git** — [download](https://git-scm.com/download/win)
 
 ### Steps
 
 ```powershell
-# Clone the repo
 git clone https://github.com/bamartinez2/keysmash.git
 cd keysmash
-
-# Install dependencies
 npm install
 
-# Run in dev mode (windowed, shortcuts not blocked)
-npm run dev
+npm run dev              # Windowed dev mode (shortcuts not blocked)
+npm start                # Fullscreen kiosk production mode
 
-# Run in production mode (fullscreen kiosk)
-npm start
-
-# Build Windows installer + portable exe
-npm run build
-
-# Or build only one target:
-npm run build:installer    # NSIS installer
-npm run build:portable     # Single portable .exe
+npm run build            # Build Windows installer + portable exe
+npm run build:installer  # NSIS installer only
+npm run build:portable   # Portable exe only
 ```
 
-Output lands in `dist/`:
-- `KeySmash Setup 1.0.0.exe` — one-click installer
-- `KeySmash-Portable-1.0.0.exe` — standalone portable exe
+Output lands in `dist/`. CI also builds automatically on tag push via GitHub Actions.
 
 ---
 
 ## Background Music
 
-Drop audio files into the `music/` folder (next to the app, or `resources/music/` if installed):
+Drop audio files into the `music/` folder:
 
-- Supported formats: `.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`
-- Playlist auto-shuffles and loops
-- Music plays at -18dB, key tones at -6dB (tones sit clearly on top)
-- If the folder is empty, music is silently disabled
+- Supported: `.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`
+- Auto-shuffles and loops
+- Music at -18dB, key tones at -6dB (tones sit clearly on top)
+- Empty folder = music silently disabled
 
-To change the music folder path or volume levels, edit `config.json`:
+Edit `config.json` to customize:
 
 ```json
 {
@@ -81,58 +87,57 @@ To change the music folder path or volume levels, edit `config.json`:
 
 ---
 
-## Hardware Lighting (Optional)
+## Hardware Lighting (Optional, Desktop Only)
 
-Both lighting integrations are optional. The app works perfectly with just sound + screen visuals.
+Both are optional. The app works with just sound + screen visuals.
 
 ### Razer Chroma (Keyboard)
 
 1. Install [Razer Synapse 3](https://www.razer.com/synapse-3)
-2. Ensure Synapse is running — Chroma SDK starts automatically on `localhost:54235`
-3. KeySmash sends per-key colors + ripple effects to your Razer keyboard
+2. Ensure Synapse is running — Chroma SDK starts on `localhost:54235`
+3. KeySmash sends per-key colors + ripple effects
 
 ### OpenRGB (NZXT Case / Other RGB)
 
 1. Download [OpenRGB](https://openrgb.org/) and install
-2. **Close NZXT CAM** — it conflicts over USB with OpenRGB
-3. Open OpenRGB, go to **Settings > SDK Server**:
-   - Check **Start Server**
-   - Port: `6742` (default)
-   - Optional: enable "Start on boot"
-4. OpenRGB auto-detects hardware. KeySmash sets all NZXT LEDs to the pressed key's color
+2. **Close NZXT CAM** (USB contention)
+3. Settings > SDK Server > Start Server, port `6742`
+4. KeySmash sets all LEDs to the pressed key's color
 
-If Razer Synapse or OpenRGB aren't running, KeySmash logs a single warning and continues — no crashes, no errors.
+If either service isn't running, KeySmash logs a warning and continues.
 
 ---
 
-## How It Works
+## Architecture
 
 ```
-RENDERER (zero-latency)              MAIN PROCESS (fire-and-forget IPC)
-┌─────────────────────┐              ┌──────────────────────────┐
-│  keydown event       │              │                          │
-│  ├─ sound.play()    │───IPC───────>│  hardware/chroma.js      │
-│  ├─ visuals.burst() │              │  └─ Razer REST API       │
-│  └─ triggerHardware()│              │  hardware/openrgb.js     │
-│                     │              │  └─ OpenRGB TCP SDK      │
-└─────────────────────┘              └──────────────────────────┘
+DESKTOP (Electron)
+  RENDERER (zero-latency)              MAIN PROCESS (fire-and-forget IPC)
+  ┌─────────────────────┐              ┌──────────────────────────┐
+  │  keydown event       │              │                          │
+  │  ├─ sound.play()    │───IPC───────>│  hardware/chroma.js      │
+  │  ├─ visuals.burst() │              │  └─ Razer REST API       │
+  │  └─ triggerHardware()│              │  hardware/openrgb.js     │
+  │                     │              │  └─ OpenRGB TCP SDK      │
+  └─────────────────────┘              └──────────────────────────┘
+
+MOBILE (Web)
+  ┌─────────────────────┐
+  │  touch/tap event     │  Single self-contained HTML file
+  │  ├─ Web Audio API   │  No dependencies, no build step
+  │  └─ Canvas 2D       │  PWA manifest for Add to Home Screen
+  └─────────────────────┘
 ```
 
-- **Sound**: Tone.js PolySynth, triangle wave, pentatonic scale (C, D, E, G, A) across 3 octaves. Any combination of keys sounds pleasant.
-- **Visuals**: Canvas 2D particle engine — burst circles, expanding rings, letter pops, slowly cycling background gradient.
-- **Chroma**: 6x22 BGR grid, ripple effect expanding outward from the pressed key, 30fps throttle.
-- **OpenRGB**: Whole-case color wash on each keypress.
+- **Sound**: Pentatonic scale (C, D, E, G, A) across 3 octaves, triangle wave. Any key combination sounds pleasant.
+- **Visuals**: Canvas 2D particles — burst circles, expanding rings, character pops, cycling background gradient.
 
-### Baby-Proofing
+### Baby-Proofing (Desktop)
 
-Blocked shortcuts (in production mode):
-- `Alt+F4`, `Alt+Tab`, `Alt+Esc`
-- `Ctrl+W`, `Ctrl+Q`, `Ctrl+T`, `Ctrl+N`, `Ctrl+F4`
-- `Ctrl+Shift+I/J` (DevTools), `Ctrl+R` (refresh)
-- `F5`, `F11`, `F12`
-- `Win+D`, `Win+E`, `Win+L`, `Win+R`, `Win+Tab`
+Blocked shortcuts in production mode:
+`Alt+F4`, `Alt+Tab`, `Alt+Esc`, `Ctrl+W`, `Ctrl+Q`, `Ctrl+T`, `Ctrl+N`, `Ctrl+F4`, `Ctrl+Shift+I/J`, `Ctrl+R`, `F5`, `F11`, `F12`, `Win+D/E/L/R/Tab`
 
-**Dev mode** (`npm run dev`) disables kiosk mode and shortcut blocking for easy development.
+Dev mode (`npm run dev`) disables all blocking for easy development.
 
 ---
 
@@ -140,9 +145,9 @@ Blocked shortcuts (in production mode):
 
 | Problem | Solution |
 |---------|----------|
-| No sound on first key | Normal — browser audio requires a user gesture. First keypress starts audio. |
-| Chroma not working | Make sure Razer Synapse 3 is running. Check `http://localhost:54235/razer/rest/chromasdk` in a browser. |
-| OpenRGB not working | Make sure OpenRGB SDK server is running (port 6742). Close NZXT CAM first. |
-| App won't exit | Hold `Ctrl+Shift+Q` for 3 full seconds. In dev mode, just close the window. |
-| Music not playing | Drop `.mp3`/`.wav`/`.ogg` files into the `music/` folder and restart. |
-| Build fails | Must build on Windows. Ensure Node.js 18+ is installed. Run `npm install` first. |
+| No sound on first key/tap | Normal — audio requires a user gesture to start |
+| Chroma not working | Ensure Razer Synapse 3 is running |
+| OpenRGB not working | Ensure SDK server is running (port 6742), close NZXT CAM |
+| Desktop app won't exit | Hold `Ctrl+Shift+Q` for 3 seconds |
+| Music not playing | Add files to `music/` folder and restart |
+| Web version not loading | Check `systemctl --user status keysmash-web` on the server |
