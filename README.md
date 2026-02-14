@@ -13,7 +13,7 @@ A baby keyboard/touch toy. Every key mash or screen tap produces a pleasant musi
 KeySmash runs as a web app on any device with a browser. Tap anywhere for sounds + visuals.
 
 **Self-hosted setup** (already running on the homelab):
-- Visit `http://10.10.20.252:8888` from your phone
+- Visit `http://<keysmash_ip>:8888` from your phone
 - **Add to Home Screen** (Safari share button) for fullscreen, app-like experience
 - Multi-touch supported — baby can mash the whole screen
 - Also works with a keyboard if one is connected
